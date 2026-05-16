@@ -2,12 +2,12 @@ import logging
 import os
 import tempfile
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
 
 BOT_TOKEN = "8967489541:AAHhPpOZm-XZRHYl2cOfRBbGeSQTVburZJQ"
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -21,24 +21,30 @@ async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Yuklanmoqda...")
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "video.mp4")
-            ydl_opts = {"outtmpl": output_path, "format": "best[ext=mp4]/best", "quiet": True}
+            ydl_opts = {
+                "outtmpl": os.path.join(tmpdir, "%(id)s.%(ext)s"),
+                "format": "best[ext=mp4]/best",
+                "quiet": True
+            }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
             files = os.listdir(tmpdir)
-            if files:
-                output_path = os.path.join(tmpdir, files[0])
-            with open(output_path, "rb") as f:
+            if not files:
+                await msg.edit_text("❌ Video topilmadi.")
+                return
+            filepath = os.path.join(tmpdir, files[0])
+            with open(filepath, "rb") as f:
                 await update.message.reply_video(video=f, caption="✅ Mana videongiz!")
             await msg.delete()
     except Exception as e:
+        logger.error(e)
         await msg.edit_text("❌ Video yuklab bolmadi.")
 
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_video))
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
